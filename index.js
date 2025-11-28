@@ -1,57 +1,96 @@
 const express = require("express");
 const { Client, GatewayIntentBits, Partials, Collection } = require("discord.js");
 const config = require("./config.json");
-const { loadEvents } = require("./Handlers/eventHandler");
-const { loadCommands } = require("./Handlers/commandHandler");
+const sequelize = require("./database");
 
-// ======= Servidor Web =======
+// Tu lógica separada
+const { procesarMensaje, borrarProducto } = require("./discordWatcher");
+
+// ===============================
+//        BASE DE DATOS
+// ===============================
+sequelize.sync()
+    .then(() => console.log("📦 Base de datos sincronizada"))
+    .catch(err => console.error("❌ Error BD:", err));
+
+// ===============================
+//        SERVIDOR WEB
+// ===============================
 const app = express();
-app.get("/", (req, res) => {
-    res.send("¡El bot está activo!");
-});
-app.listen(3000, () => {
-    console.log("Servidor web funcionando en el puerto 3000");
-});
-// ============================
 
+app.get("/", (req, res) => res.send("Bot activo 🚀"));
+
+app.listen(3000, () => {
+    console.log("🌐 Servidor web en puerto 3000");
+});
+
+
+// ===============================
+//           BOT DISCORD
+// ===============================
 const client = new Client({
-    intents: Object.values(GatewayIntentBits),
-    partials: Object.values(Partials),
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
+    ],
+    partials: [
+        Partials.Message,
+        Partials.Channel
+    ]
 });
 
 client.commands = new Collection();
 
-// ================= ALERTA DE CANALES ===================
-const ALERT_CHANNEL_ID = '1408871845586927746';
-const ALERT_TAG = '<@&ID_DEL_ROL>'; 
+// ===============================
+//        CANALES A VIGILAR
+// ===============================
+const CHANNELS_TO_WATCH = [
+    "1389358951480561745",
+    "1393294587409334322",
+    "1393294722985885746",
+    "1393318889894449342",
+    "1393294754187444294"
+];
 
-async function checkChannelLimit(guild) {
-    const channelCount = guild.channels.cache.size;
+// ===============================
+//     MENSAJES NUEVOS = CREAR
+// ===============================
+client.on("messageCreate", async (message) => {
+    if (message.author.bot) return;
+    if (!CHANNELS_TO_WATCH.includes(message.channel.id)) return;
 
-    if (channelCount >= 380 && channelCount < 400) {
-        const alertChannel = guild.channels.cache.get(ALERT_CHANNEL_ID);
-        if (alertChannel) {
-            alertChannel.send(`${ALERT_TAG} ⚠️ El servidor ya tiene **${channelCount}** canales, estamos cerca del límite de 400.`);
-        }
+    try {
+        await procesarMensaje(message);
+    } catch (err) {
+        console.error("❌ Error procesando mensaje:", err);
     }
-}
-
-client.on("channelCreate", channel => checkChannelLimit(channel.guild));
-
-client.on("ready", async () => {
-    console.log(`✅ Bot conectado como ${client.user.tag}`);
-
-    // ✅ Cargar comandos aquí (después del login)
-    await loadCommands(client);
 });
 
-// =======================================================
+// ===============================
+//     MENSAJES BORRADOS = VENDIDO
+// ===============================
+client.on("messageDelete", async (message) => {
+    if (!message?.id) return;
+    if (!CHANNELS_TO_WATCH.includes(message.channelId)) return;
 
-// ✅ Cargar solo los eventos (no los comandos aún)
-loadEvents(client);
+    try {
+        await borrarProducto(message);
+    } catch (err) {
+        console.error("❌ Error al eliminar producto:", err);
+    }
+});
 
-// ✅ Iniciar sesión en Discord
+// ===============================
+//           READY
+// ===============================
+client.once("ready", () => {
+    console.log(`✅ Bot conectado como ${client.user.tag}`);
+});
+
+// ===============================
+//         LOGIN
+// ===============================
 client.login(config.token)
-    .then(() => console.log("🔹 Iniciando sesión en Discord..."))
-    .catch(err => console.error("❌ Error al iniciar sesión:", err));
-
+    .then(() => console.log("🔹 Conectando bot..."))
+    .catch(err => console.error("❌ Error Discord:", err));
