@@ -1,4 +1,4 @@
-const DiscordProduct = require("./models/DiscordProducts");
+const DiscordProduct = require("./Models/DiscordProducts");
 const { crearProducto, eliminarProducto } = require("./shopify");
 
 const regexPatterns = [
