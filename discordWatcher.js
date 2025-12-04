@@ -24,6 +24,25 @@ function extraerPrecio(texto) {
     return null;
 }
 
+function acortarTexto(texto, max = 250) {
+    if (!texto) return "";
+    texto = texto.trim();
+
+    if (texto.length <= max) return texto;
+
+    // Corta limpio sin cortar palabras a la mitad
+    let corto = texto.slice(0, max);
+    const ultimoEspacio = corto.lastIndexOf(" ");
+
+    if (ultimoEspacio > 0) {
+        corto = corto.slice(0, ultimoEspacio);
+    }
+
+    return corto + "...";
+}
+
+const tituloCorto = acortarTexto(message.content, 250);
+
 async function procesarMensaje(message) {
 
     const images = message.attachments.map(a => a.url);
@@ -44,7 +63,7 @@ async function procesarMensaje(message) {
 
     // Crear producto en Shopify
     const productoShopify = await crearProducto(
-        message.content,   // titulo
+        tituloCorto,   // titulo
         message.content,   // descripción
         images,            // todas las imágenes
         price,
