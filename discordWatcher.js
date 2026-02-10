@@ -41,49 +41,57 @@ function acortarTexto(texto, max = 250) {
     return corto + "...";
 }
 
-const tituloCorto = acortarTexto(message.content, 250);
-
 async function procesarMensaje(message) {
+    try {
+        // 📷 Obtener imágenes
+        const images = message.attachments.map(a => a.url);
+        if (images.length === 0) return;
 
-    const images = message.attachments.map(a => a.url);
-    if (images.length === 0) return;
+        // 💲 Extraer precio
+        const price = extraerPrecio(message.content);
+        if (price === null || isNaN(price)) {
+            console.log(`⚠️ Mensaje ignorado (sin precio válido): ${message.id}`);
+            return;
+        }
 
-    const canalID = message.channel.id;
+        // 🏷️ Categoría según canal
+        const canalID = message.channel.id;
+        const categoria = CHANNEL_CATEGORY[canalID] || "Sin categoría";
 
-    // Obtener tag según canal
-    const categoria = CHANNEL_CATEGORY[canalID] || "Sin categoría";
+        // 📝 Título corto seguro
+        const tituloCorto = acortarTexto(message.content, 250);
 
-    const price = extraerPrecio(message.content);
+        // 🏷️ Nombre del canal (por si lo usas después)
+        const channelName = message.channel.name;
+        const tags = [channelName]; // (opcional)
 
-    // ✅ Obtener nombre real del canal
-    const channelName = message.channel.name; 
+        // 🛒 Crear producto en Shopify
+        const productoShopify = await crearProducto(
+            tituloCorto,         // título
+            message.content,     // descripción
+            images,              // imágenes
+            price,               // 💲 SIEMPRE válido
+            categoria
+        );
 
-    // ✅ Usar nombre del canal como tag
-    const tags = [channelName];
+        // 💾 Guardar relación en BD
+        await DiscordProduct.create({
+            messageId: message.id,
+            channelId: message.channel.id,
+            content: message.content,
+            images,
+            price,
+            shopifyProductId: productoShopify.id,
+            status: "disponible",
+            created_at: new Date(message.createdTimestamp)
+        });
 
-    // Crear producto en Shopify
-    const productoShopify = await crearProducto(
-        tituloCorto,   // titulo
-        message.content,   // descripción
-        images,            // todas las imágenes
-        price,
-        categoria              // 👈 aquí mandamos los tags
-    );
+        console.log(`✅ Producto creado: ${message.id}`);
 
-    await DiscordProduct.create({
-        messageId: message.id,
-        channelId: message.channel.id,
-        content: message.content,
-        images,
-        price,
-        shopifyProductId: productoShopify.id,
-        status: "disponible",
-        created_at: new Date(message.createdTimestamp)
-    });
-
-    console.log(`✅ Producto creado: ${message.id}`);
+    } catch (error) {
+        console.error(`❌ Error procesando mensaje ${message.id}:`, error);
+    }
 }
-
 async function borrarProducto(message) {
 
     const producto = await DiscordProduct.findOne({
